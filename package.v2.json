@@ -24,7 +24,7 @@
     "name": "彩虹岛 AI 答题助手",
     "description": "自动访问彩虹岛答题页面，利用 AI 识别并提交答案。",
     "labels": "站点,工具",
-    "version": "1.0.2",
+    "version": "1.0.1",
     "icon": "rss.png",
     "author": "wuzen",
     "level": 2,

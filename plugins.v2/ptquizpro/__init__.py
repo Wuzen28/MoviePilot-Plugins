@@ -13,7 +13,7 @@ class PTQuizPro(_PluginBase):
     plugin_name = "彩虹岛 AI 答题助手"
     plugin_desc = "自动访问彩虹岛答题页面，利用 AI 识别并提交答案。"
     plugin_icon = "https://ptchdbits.co/favicon.ico"
-    plugin_version = "1.0.1"
+    plugin_version = "1.0.2"
     plugin_author = "wuzen"
     plugin_order = 100
     auth_level = 2

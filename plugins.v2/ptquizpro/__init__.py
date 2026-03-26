@@ -9,7 +9,7 @@ from app.log import logger
 from app.plugins import _PluginBase
 
 class PTQuizPro(_PluginBase):
-    # 插件元数据（由系统读取，对应 package.v2.json 的展示）
+    # 插件元数据属性
     plugin_name = "彩虹岛 AI 答题助手"
     plugin_desc = "自动访问彩虹岛答题页面，利用 AI 识别并提交答案。"
     plugin_icon = "https://ptchdbits.co/favicon.ico"
@@ -44,27 +44,32 @@ class PTQuizPro(_PluginBase):
             self._model = config.get("model")
             self._cookie = config.get("site_cookie")
 
-        # 需求 ③：立即运行一次逻辑
+        # 立即运行一次逻辑
         if self._enabled and self._onlyonce:
             self.info("检测到立即运行指令，开始执行答题任务...")
             self.solve_quiz()
-            # 运行后关闭一次性开关，防止重启后再次触发
-            self.update_config({**config, "onlyonce": False})
+            # 运行后关闭一次性开关并更新配置
+            new_config = config.copy()
+            new_config["onlyonce"] = False
+            self.update_config(new_config)
 
     def get_service(self) -> List[Dict[str, Any]]:
         """
-        注册插件公共服务 (需求 ⑤：签到周期)
+        注册插件定时服务
         """
         if self._enabled and self._cron:
-            return [
-                {
-                    "id": "PTQuizProService",
-                    "name": "彩虹岛自动答题服务",
-                    "trigger": CronTrigger.from_crontab(self._cron),
-                    "func": self.solve_quiz,
-                    "kwargs": {}
-                }
-            ]
+            try:
+                return [
+                    {
+                        "id": "PTQuizProService",
+                        "name": "彩虹岛自动答题服务",
+                        "trigger": CronTrigger.from_crontab(self._cron),
+                        "func": self.solve_quiz,
+                        "kwargs": {}
+                    }
+                ]
+            except Exception as e:
+                self.error(f"Cron 表达式解析失败: {str(e)}")
         return []
 
     def solve_quiz(self):
@@ -82,7 +87,6 @@ class PTQuizPro(_PluginBase):
             "Referer": "https://ptchdbits.co/"
         }
         
-        # 需求 ④：使用代理
         proxies = {
             "http": self._proxy,
             "https": self._proxy
@@ -99,7 +103,7 @@ class PTQuizPro(_PluginBase):
 
             soup = BeautifulSoup(res.text, 'html.parser')
             
-            # 2. 识别题目
+            # 2. 识别题目 (匹配 NexusPHP 答题页面的特征)
             q_td = soup.find('td', class_='text', string=re.compile(r'请问|单选|多选'))
             if not q_td or "识别" in q_td.text:
                 self.info("未发现待回答题目，可能今日已完成。")
@@ -119,14 +123,14 @@ class PTQuizPro(_PluginBase):
                 text = label.strip() if label and isinstance(label, str) else ""
                 options_list.append(text)
 
-            # 4. 调用 AI (需求 ⑥)
+            # 4. 调用 AI 解析答案
             ans_indices = self._call_ai(question_text, options_list, proxies)
             
             if not ans_indices:
                 self.error("AI 未能返回任何有效答案编号")
                 return
 
-            # 5. 构造 POST 表单
+            # 5. 构造提交表单
             post_data = {}
             for idx_str in ans_indices:
                 idx = int(idx_str) - 1
@@ -140,17 +144,16 @@ class PTQuizPro(_PluginBase):
                     else:
                         post_data[name] = val
 
-            # 6. 提交答案并记录状态 (需求 ⑦)
+            # 6. 提交答案
             submit_res = requests.post(site_url, headers=headers, data=post_data, proxies=proxies, timeout=20)
             
             if "回答正确" in submit_res.text or "succeed" in submit_res.text.lower():
                 status_msg = f"✅ 答题成功！\n题目: {question_text}\nAI 选择: {ans_indices}"
                 self.info(status_msg)
             else:
-                status_msg = f"❌ 提交失败或结果未知，请检查站点页面。"
+                status_msg = f"❌ 提交结果未知，请检查站点页面反馈。"
                 self.warn(status_msg)
                 
-            # 需求 ②：开启通知
             if self._notify:
                 self.post_message(title="PT 答题助手", text=status_msg)
 
@@ -162,7 +165,7 @@ class PTQuizPro(_PluginBase):
 
     def _call_ai(self, question: str, options: List[str], proxies: Optional[Dict]):
         """
-        调用 AI 接口解析答案
+        调用 AI 接口
         """
         opts_str = "\n".join([f"[{i+1}] {text}" for i, text in enumerate(options)])
         payload = {
@@ -170,7 +173,7 @@ class PTQuizPro(_PluginBase):
             "messages": [
                 {
                     "role": "system",
-                    "content": "你是一个百科专家，精通 PT 站 (NexusPHP) 规则。只输出正确选项的数字编号，逗号分隔，严禁解释。"
+                    "content": "你是一个百科专家，精通 PT 站规则。只输出正确选项的数字编号，逗号分隔，严禁解释。"
                 },
                 {
                     "role": "user",
@@ -196,7 +199,7 @@ class PTQuizPro(_PluginBase):
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         """
-        定义插件配置页面 (UI 渲染逻辑)
+        拼装插件配置页面
         """
         return [
             {
@@ -231,10 +234,10 @@ class PTQuizPro(_PluginBase):
                         'component': 'VRow',
                         'content': [
                             {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [
-                                {'component': 'VTextField', 'props': {'model': 'api_url', 'label': 'API URL', 'default': 'https://openrouter.ai/api/v1/chat/completions'}}
+                                {'component': 'VTextField', 'props': {'model': 'api_url', 'label': 'API URL'}}
                             ]},
                             {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [
-                                {'component': 'VTextField', 'props': {'model': 'model', 'label': 'AI 模型', 'default': 'google/gemini-2.0-flash-001'}}
+                                {'component': 'VTextField', 'props': {'model': 'model', 'label': 'AI 模型'}}
                             ]}
                         ]
                     },
@@ -250,7 +253,7 @@ class PTQuizPro(_PluginBase):
                         'component': 'VRow',
                         'content': [
                             {'component': 'VCol', 'props': {'cols': 12}, 'content': [
-                                {'component': 'VTextarea', 'props': {'model': 'site_cookie', 'label': '站点 Cookie', 'rows': 3, 'placeholder': '填入完整的 Cookie 字符串'}}
+                                {'component': 'VTextarea', 'props': {'model': 'site_cookie', 'label': '站点 Cookie', 'rows': 3}}
                             ]}
                         ]
                     }
@@ -270,19 +273,15 @@ class PTQuizPro(_PluginBase):
 
     def get_page(self) -> List[dict]:
         """
-        插件详情页 (需求 ⑦：查看成功/失败记录)
-        这里简单返回最近的操作日志信息
+        插件详情页
         """
         return [
             {
                 'component': 'div',
                 'props': {'class': 'text-center pa-4'},
-                'text': '请通过 MoviePilot 的“日志”菜单查看详细的答题过程和结果。'
+                'text': '答题结果请查看 MoviePilot 系统日志。'
             }
         ]
 
     def stop_service(self):
-        """
-        停止插件服务
-        """
         pass

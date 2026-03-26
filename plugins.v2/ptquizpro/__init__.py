@@ -9,23 +9,32 @@ from app.log import logger
 from app.plugins import _PluginBase
 
 class PTQuizPro(_PluginBase):
-    # 1. 插件元数据属性
-    plugin_name = "彩虹岛 AI 答题助手"
-    plugin_desc = "利用 AI 识别并提交答案，支持自动答题与通知。"
-    plugin_icon = "https://ptchdbits.co/favicon.ico"
-    plugin_version = "1.0.4"
-    plugin_author = "wuzen"
-    plugin_order = 100
-    auth_level = 2
+    """
+    彩虹岛 AI 答题助手 v1.0.5
+    加固版：强制实现所有可能的抽象方法，确保插件实例化成功。
+    """
 
-    # 2. 必须实现的抽象方法 (解决本次报错的关键)
+    # 1. 必须实现的抽象方法 (解决 TypeError 的关键)
     def get_state(self) -> bool:
-        """返回插件是否启用的状态"""
+        """返回插件启用状态"""
         return self._enabled
 
     def get_api(self) -> List[Dict[str, Any]]:
-        """暴露 API 接口，无接口则返回空列表"""
+        """暴露 API 接口"""
         return []
+
+    def get_command(self) -> List[Dict[str, Any]]:
+        """注册远程命令"""
+        return []
+
+    # 2. 插件元数据属性
+    plugin_name = "彩虹岛 AI 答题助手"
+    plugin_desc = "利用 AI 识别并提交答案，支持自动答题与通知。"
+    plugin_icon = "https://ptchdbits.co/favicon.ico"
+    plugin_version = "1.0.5"
+    plugin_author = "wuzen"
+    plugin_order = 100
+    auth_level = 2
 
     # 3. 私有配置属性初始化
     _enabled = False
@@ -55,7 +64,7 @@ class PTQuizPro(_PluginBase):
         if self._enabled and self._onlyonce:
             self.info("检测到立即运行指令，开始执行答题任务...")
             self.solve_quiz()
-            # 运行后关闭一次性开关
+            # 运行后关闭一次性开关并持久化配置
             config['onlyonce'] = False
             self.update_config(config)
 
@@ -71,7 +80,7 @@ class PTQuizPro(_PluginBase):
                     "kwargs": {}
                 }]
             except Exception as e:
-                self.error(f"Cron 表达式错误: {str(e)}")
+                self.error(f"Cron 表达式解析错误: {str(e)}")
         return []
 
     def solve_quiz(self):
@@ -101,6 +110,7 @@ class PTQuizPro(_PluginBase):
                 return
 
             soup = BeautifulSoup(res.text, 'html.parser')
+            # 兼容性匹配题目单元格
             q_td = soup.find('td', class_='text', string=re.compile(r'请问|单选|多选'))
             if not q_td or "识别" in q_td.text:
                 self.info("未发现待回答题目。")
@@ -109,6 +119,7 @@ class PTQuizPro(_PluginBase):
             question_text = q_td.get_text(strip=True)
             self.info(f"获取题目成功: {question_text}")
             
+            # 提取选项行
             options_row = q_td.find_parent('tr').find_next_sibling('tr')
             options_td = options_row.find('td', class_='text')
             inputs = options_td.find_all('input')
@@ -119,12 +130,14 @@ class PTQuizPro(_PluginBase):
                 text = label.strip() if label and isinstance(label, str) else ""
                 options_list.append(text)
 
+            # 调用 AI 接口
             ans_indices = self._call_ai(question_text, options_list, proxies)
             
             if not ans_indices:
                 self.error("AI 未能返回有效答案")
                 return
 
+            # 构造提交表单数据
             post_data = {}
             for idx_str in ans_indices:
                 idx = int(idx_str) - 1
@@ -138,6 +151,7 @@ class PTQuizPro(_PluginBase):
                     else:
                         post_data[name] = val
 
+            # 提交并解析反馈
             submit_res = requests.post(site_url, headers=headers, data=post_data, proxies=proxies, timeout=20)
             
             if "回答正确" in submit_res.text or "succeed" in submit_res.text.lower():
@@ -154,7 +168,7 @@ class PTQuizPro(_PluginBase):
             self.error(f"运行异常: {str(e)}")
 
     def _call_ai(self, question, options, proxies):
-        """调用 AI 接口"""
+        """调用 AI 解析接口"""
         opts_str = " ".join([f"[{i+1}] {text}" for i, text in enumerate(options)])
         payload = {
             "model": self._model,
@@ -175,7 +189,7 @@ class PTQuizPro(_PluginBase):
             return None
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
-        """定义配置表单"""
+        """拼装配置表单页面"""
         return [
             {
                 'component': 'VForm',
@@ -208,7 +222,9 @@ class PTQuizPro(_PluginBase):
         }
 
     def get_page(self) -> List[dict]:
-        return [{'component': 'div', 'props': {'class': 'text-center pa-4'}, 'text': '请查看系统日志。'}]
+        """插件详情页展示内容"""
+        return [{'component': 'div', 'props': {'class': 'text-center pa-4'}, 'text': '答题结果请实时通过 MoviePilot 的“日志”菜单查看。'}]
 
     def stop_service(self):
+        """停止服务时的清理操作"""
         pass

@@ -9,16 +9,25 @@ from app.log import logger
 from app.plugins import _PluginBase
 
 class PTQuizPro(_PluginBase):
-    # 插件元数据
+    # 1. 插件元数据属性
     plugin_name = "彩虹岛 AI 答题助手"
-    plugin_desc = "利用 AI 识别并提交答案。"
+    plugin_desc = "利用 AI 识别并提交答案，支持自动答题与通知。"
     plugin_icon = "https://ptchdbits.co/favicon.ico"
-    plugin_version = "1.0.3"
+    plugin_version = "1.0.4"
     plugin_author = "wuzen"
     plugin_order = 100
     auth_level = 2
 
-    # 私有配置属性
+    # 2. 必须实现的抽象方法 (解决本次报错的关键)
+    def get_state(self) -> bool:
+        """返回插件是否启用的状态"""
+        return self._enabled
+
+    def get_api(self) -> List[Dict[str, Any]]:
+        """暴露 API 接口，无接口则返回空列表"""
+        return []
+
+    # 3. 私有配置属性初始化
     _enabled = False
     _onlyonce = False
     _notify = False
@@ -30,6 +39,7 @@ class PTQuizPro(_PluginBase):
     _cookie = ""
 
     def init_plugin(self, config: dict = None):
+        """初始化配置"""
         if config:
             self._enabled = config.get("enabled")
             self._onlyonce = config.get("onlyonce")
@@ -41,13 +51,16 @@ class PTQuizPro(_PluginBase):
             self._model = config.get("model")
             self._cookie = config.get("site_cookie")
 
+        # 立即运行一次逻辑
         if self._enabled and self._onlyonce:
             self.info("检测到立即运行指令，开始执行答题任务...")
             self.solve_quiz()
+            # 运行后关闭一次性开关
             config['onlyonce'] = False
             self.update_config(config)
 
     def get_service(self) -> List[Dict[str, Any]]:
+        """注册定时服务"""
         if self._enabled and self._cron:
             try:
                 return [{
@@ -61,15 +74,10 @@ class PTQuizPro(_PluginBase):
                 self.error(f"Cron 表达式错误: {str(e)}")
         return []
 
-    def get_state(self) -> bool:
-        return self._enabled
-
-    def get_api(self) -> List[Dict[str, Any]]:
-        return []
-
     def solve_quiz(self):
+        """核心答题逻辑"""
         if not self._cookie:
-            self.error("未配置站点 Cookie")
+            self.error("未配置站点 Cookie，任务停止")
             return
 
         site_url = "https://ptchdbits.co/bakatest.php"
@@ -136,7 +144,7 @@ class PTQuizPro(_PluginBase):
                 status_msg = f"✅ 答题成功！题目: {question_text} AI 选择: {ans_indices}"
                 self.info(status_msg)
             else:
-                status_msg = "❌ 提交结果未知，请检查站点页面。"
+                status_msg = "❌ 提交结果未知，请手动检查站点。"
                 self.warn(status_msg)
                 
             if self._notify:
@@ -146,12 +154,13 @@ class PTQuizPro(_PluginBase):
             self.error(f"运行异常: {str(e)}")
 
     def _call_ai(self, question, options, proxies):
-        opts_str = "\n".join([f"[{i+1}] {text}" for i, text in enumerate(options)])
+        """调用 AI 接口"""
+        opts_str = " ".join([f"[{i+1}] {text}" for i, text in enumerate(options)])
         payload = {
             "model": self._model,
             "messages": [
                 {"role": "system", "content": "你是一个百科专家，精通 PT 站规则。只输出正确选项的数字编号，逗号分隔，严禁解释。"},
-                {"role": "user", "content": f"题目: {question}\n选项:\n{opts_str}"}
+                {"role": "user", "content": f"题目: {question} 选项: {opts_str}"}
             ],
             "temperature": 0.1
         }
@@ -166,6 +175,7 @@ class PTQuizPro(_PluginBase):
             return None
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
+        """定义配置表单"""
         return [
             {
                 'component': 'VForm',

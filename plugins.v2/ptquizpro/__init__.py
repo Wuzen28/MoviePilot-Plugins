@@ -4,7 +4,7 @@ from typing import Any, List, Dict, Tuple
 class PTQuizPro(_PluginBase):
     plugin_name = "彩虹岛 AI 答题助手"
     plugin_desc = "测试安装"
-    plugin_version = "1.0.0"
+    plugin_version = "1.0.2"
 
     def init_plugin(self, config: dict = None):
         pass

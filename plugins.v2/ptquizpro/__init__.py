@@ -13,7 +13,7 @@ class PTQuizPro(_PluginBase):
     plugin_name = "彩虹岛 AI 答题助手"
     plugin_desc = "利用 AI 识别并提交答案。"
     plugin_icon = "https://ptchdbits.co/favicon.ico"
-    plugin_version = "1.0.2"
+    plugin_version = "1.0.3"
     plugin_author = "wuzen"
     plugin_order = 100
     auth_level = 2
@@ -49,25 +49,22 @@ class PTQuizPro(_PluginBase):
 
     def get_service(self) -> List[Dict[str, Any]]:
         if self._enabled and self._cron:
-            return [{
-                "id": "PTQuizProService",
-                "name": "彩虹岛自动答题服务",
-                "trigger": CronTrigger.from_crontab(self._cron),
-                "func": self.solve_quiz,
-                "kwargs": {}
-            }]
+            try:
+                return [{
+                    "id": "PTQuizProService",
+                    "name": "彩虹岛自动答题服务",
+                    "trigger": CronTrigger.from_crontab(self._cron),
+                    "func": self.solve_quiz,
+                    "kwargs": {}
+                }]
+            except Exception as e:
+                self.error(f"Cron 表达式错误: {str(e)}")
         return []
 
     def get_state(self) -> bool:
-        """
-        实现抽象方法：返回插件启用状态
-        """
         return self._enabled
 
     def get_api(self) -> List[Dict[str, Any]]:
-        """
-        实现抽象方法：暴露 API 接口（此处返回空列表）
-        """
         return []
 
     def solve_quiz(self):
@@ -136,12 +133,10 @@ class PTQuizPro(_PluginBase):
             submit_res = requests.post(site_url, headers=headers, data=post_data, proxies=proxies, timeout=20)
             
             if "回答正确" in submit_res.text or "succeed" in submit_res.text.lower():
-                status_msg = f"✅ 答题成功！
-题目: {question_text}
-AI 选择: {ans_indices}"
+                status_msg = f"✅ 答题成功！题目: {question_text} AI 选择: {ans_indices}"
                 self.info(status_msg)
             else:
-                status_msg = f"❌ 提交结果未知，请检查站点页面。"
+                status_msg = "❌ 提交结果未知，请检查站点页面。"
                 self.warn(status_msg)
                 
             if self._notify:
@@ -151,15 +146,12 @@ AI 选择: {ans_indices}"
             self.error(f"运行异常: {str(e)}")
 
     def _call_ai(self, question, options, proxies):
-        opts_str = "
-".join([f"[{i+1}] {text}" for i, text in enumerate(options)])
+        opts_str = "\n".join([f"[{i+1}] {text}" for i, text in enumerate(options)])
         payload = {
             "model": self._model,
             "messages": [
                 {"role": "system", "content": "你是一个百科专家，精通 PT 站规则。只输出正确选项的数字编号，逗号分隔，严禁解释。"},
-                {"role": "user", "content": f"题目: {question}
-选项:
-{opts_str}"}
+                {"role": "user", "content": f"题目: {question}\n选项:\n{opts_str}"}
             ],
             "temperature": 0.1
         }
@@ -191,8 +183,12 @@ AI 选择: {ans_indices}"
                         {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VTextField', 'props': {'model': 'api_url', 'label': 'API URL'}}]},
                         {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VTextField', 'props': {'model': 'model', 'label': 'AI 模型'}}]}
                     ]},
-                    {'component': 'VCol', 'props': {'cols': 12}, 'content': [{'component': 'VTextField', 'props': {'model': 'api_key', 'label': 'API KEY', 'type': 'password'}}]},
-                    {'component': 'VCol', 'props': {'cols': 12}, 'content': [{'component': 'VTextarea', 'props': {'model': 'site_cookie', 'label': '站点 Cookie', 'rows': 3}}]}
+                    {'component': 'VRow', 'content': [
+                        {'component': 'VCol', 'props': {'cols': 12}, 'content': [{'component': 'VTextField', 'props': {'model': 'api_key', 'label': 'API KEY', 'type': 'password'}}]}
+                    ]},
+                    {'component': 'VRow', 'content': [
+                        {'component': 'VCol', 'props': {'cols': 12}, 'content': [{'component': 'VTextarea', 'props': {'model': 'site_cookie', 'label': '站点 Cookie', 'rows': 3}}]}
+                    ]}
                 ]
             }
         ], {

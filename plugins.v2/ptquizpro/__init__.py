@@ -8,7 +8,7 @@ class PTQuizPro(_PluginBase):
     plugin_name = "彩虹岛 AI 答题助手"
     plugin_desc = "【诊断模式】用于验证插件加载协议是否正常"
     plugin_icon = "https://ptchdbits.co/favicon.ico"
-    plugin_version = "1.0.0"
+    plugin_version = "1.0.3”
     plugin_author = "wuzen"
     
     # 2. 内部配置属性初始化

@@ -644,5 +644,17 @@
     "history": {
       "v1.0.0": "首次发布"
     }
+  },
+    "PTQuizPro": {
+    "name": "彩虹岛 AI 答题助手",
+    "description": "自动访问彩虹岛答题页面，利用 AI 识别并提交答案。",
+    "labels": "站点,工具",
+    "version": "1.0.0",
+    "icon": "rss.png",
+    "author": "wuzen",
+    "level": 2,
+    "history": {
+      "v1.0.0": "首次发布"
+    }
   }
 }
